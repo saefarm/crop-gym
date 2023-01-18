@@ -15,14 +15,15 @@ class FertilizationEnv(gym.Env):
 
     def __init__(self, intervention_interval=7,\
          beta=10, seed=0, fixed_year=None, fixed_location=None):
-        self.action_space = gym.spaces.Discrete(7)
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(53,))
-        crop = pcse.fileinput.PCSEFileReader(os.path.join(DATA_DIR, "crop",
-                                                          "lintul3_winterwheat.crop"))
-        soil = pcse.fileinput.PCSEFileReader(os.path.join(DATA_DIR, "soil",
-                                                          "lintul3_springwheat.soil"))
-        site = pcse.fileinput.PCSEFileReader(os.path.join(DATA_DIR, "site",
-                                                          "lintul3_springwheat.site"))
+        # self.action_space = gym.spaces.Discrete(10)
+        self.action_space = gym.spaces.Box(low=0.00, high=100.00, shape=(1,))
+
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(46,))
+        crop = pcse.fileinput.YAMLCropDataProvider()
+        soil = pcse.fileinput.CABOFileReader(os.path.join(DATA_DIR, "soil",
+                                                          "ec1.soil"))
+        site = pcse.util.WOFOST71SiteDataProvider(WAV=100)
+
         self.parameterprovider = pcse.base.ParameterProvider(soildata=soil, cropdata=crop,
                                                              sitedata=site)
         self.intervention_interval = intervention_interval
@@ -36,9 +37,9 @@ class FertilizationEnv(gym.Env):
         self.agromanagement, self.crop_start_date, self.crop_end_date = \
             self._load_agromanagement_data()
         self.date = self.crop_start_date
-        self.model = pcse.models.LINTUL3(self.parameterprovider, self.weatherdataprovider,
+        self.model = pcse.models.Wofost72_WLP_FD(self.parameterprovider, self.weatherdataprovider,
                                          self.agromanagement)
-        self.baseline_model = pcse.models.LINTUL3(self.parameterprovider, self.weatherdataprovider,
+        self.baseline_model = pcse.models.Wofost72_WLP_FD(self.parameterprovider, self.weatherdataprovider,
                                                   self.agromanagement)
         self.log = self._init_log()
 
@@ -78,10 +79,10 @@ class FertilizationEnv(gym.Env):
         observation = self._process_output(output)
         self.date = output.index[-1]
 
-        growth = output['WSO'][-1] - output['WSO'][-1-self.intervention_interval]
+        growth = output['TWSO'][-1] - output['TWSO'][-1-self.intervention_interval]
         growth = growth if not np.isnan(growth) else 0
-        baseline_growth = baseline_output['WSO'][-1]\
-            - baseline_output['WSO'][-1-self.intervention_interval]
+        baseline_growth = baseline_output['TWSO'][-1]\
+            - baseline_output['TWSO'][-1-self.intervention_interval]
         baseline_growth = baseline_growth if not np.isnan(baseline_growth) else 0
 
         reward = growth - baseline_growth - self.beta * fertilizer
@@ -155,7 +156,8 @@ class FertilizationEnv(gym.Env):
         return output
 
     def _take_action(self, action):
-        amount = action*self.amount # in g/m^2
+        # amount = action*self.amount # in g/m^2
+        amount = action
         self.model._send_signal(signal=pcse.signals.apply_n, amount=amount, recovery=0.7)
         return amount
 
@@ -171,9 +173,9 @@ class FertilizationEnv(gym.Env):
         self.crop_end_date = \
             list(self.agromanagement[0].values())[0]['CropCalendar']['crop_end_date']
         self.date = self.crop_start_date
-        self.model = pcse.models.LINTUL3(self.parameterprovider, self.weatherdataprovider,
+        self.model = pcse.models.Wofost72_WLP_FD(self.parameterprovider, self.weatherdataprovider,
                                          self.agromanagement)
-        self.baseline_model = pcse.models.LINTUL3(self.parameterprovider, self.weatherdataprovider,
+        self.baseline_model = pcse.models.Wofost72_WLP_FD(self.parameterprovider, self.weatherdataprovider,
                                                   self.agromanagement)
         output = self._run_simulation(self.model)
         self._run_simulation(self.baseline_model)

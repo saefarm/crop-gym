@@ -8,7 +8,6 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
 
-
 def train(name, log_dir, tensorboard_dir, beta, n_steps, resume):
     """
     Train a PPO agent
@@ -64,10 +63,22 @@ def train(name, log_dir, tensorboard_dir, beta, n_steps, resume):
         env = VecNormalize.load(stats_path, env)
         env.reset()
         model.set_env(env)
+
     model.learn(n_steps, reset_num_timesteps=not resume)
 
     model.save(model_path)
     env.save(stats_path)
+
+    obs = env.reset()
+    WOY = 0
+    while True:
+        action, _states = model.predict(obs)
+        obs, rewards, dones, info = env.step(action)
+        WOY += 1
+        print(WOY, action)
+        if dones[0]:
+            env.reset()
+            break
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
